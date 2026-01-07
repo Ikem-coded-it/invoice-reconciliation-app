@@ -19,11 +19,13 @@ export class DrizzleService {
     callback: (tx: any) => Promise<T>
   ): Promise<T> {
     return this.db.transaction(async (tx) => {
-      // 1. Set the RLS variable only for this transaction
-      // We use sql.raw because we are injecting a value directly into the session config
+      // switch to the restricted role (This enforces RLS)
+      await tx.execute(sql`SET LOCAL ROLE app_user`);
+
+      // set the RLS variable only for this transaction
       await tx.execute(sql`SELECT set_config('app.current_tenant_id', ${tenantId}, true)`);
       
-      // 2. Run the actual business logic passed in the callback
+      // run the actual business logic passed in the callback
       return callback(tx);
     });
   }

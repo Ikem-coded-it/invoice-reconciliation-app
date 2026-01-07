@@ -2,7 +2,7 @@ import { Controller, Post, Get, Body, Param, UseInterceptors } from '@nestjs/com
 import { BankTransactionsService } from './bank-transactions.service';
 import { IdempotencyInterceptor } from '../common/interceptors/idempotency.interceptor';
 
-@Controller('tenants/:tenantId/bank-transactions')
+@Controller('v1/tenants/:tenantId/bank-transactions')
 export class BankTransactionsController {
   constructor(private readonly service: BankTransactionsService) {}
 

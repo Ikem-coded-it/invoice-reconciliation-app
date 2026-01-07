@@ -1,7 +1,7 @@
 import { Controller, Post, Param } from '@nestjs/common';
 import { ReconciliationService } from './reconciliation.service';
 
-@Controller('tenants/:tenantId/reconcile')
+@Controller('v1/tenants/:tenantId/reconcile')
 export class ReconciliationController {
   constructor(private readonly service: ReconciliationService) {}
 

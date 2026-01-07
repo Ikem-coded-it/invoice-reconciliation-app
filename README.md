@@ -1,5 +1,3 @@
-
-
 # Multi-Tenant Invoice Reconciliation System
 
 A production-ready demo application implementing a polyglot architecture (NestJS + Python) for reconciling bank transactions with invoices. Key features include **Row Level Security (RLS)** for strict multi-tenancy and **Idempotency** for safe bulk operations.
@@ -149,3 +147,29 @@ To ensure safe bulk imports (e.g., retrying a failed network request doesn't dup
 ### Polyglot Architecture
 - NestJS: Handles I/O, Auth, DB management, and orchestrates the flow.
 - Python: Acts as a pure, stateless computation engine. It receives data, computes scores (using heuristics like exact match, date proximity, and text similarity), and returns results. It does not touch the database directly, preserving a clean separation of concerns.
+
+
+## Matching Logic (Python Engine)
+
+The reconciliation engine uses a deterministic scoring algorithm to evaluate the likelihood of a match between an invoice and a bank transaction. A candidate is only returned if the total confidence score exceeds **0.6**.
+
+### Scoring Heuristics
+
+1.  **Exact Amount Match (+0.7)**
+    * **Logic:** `abs(invoice.amount - transaction.amount) < 0.01`
+    * **Reasoning:** Financial records are precise. If the amounts match exactly, it is the strongest indicator of a link.
+
+2.  **Vendor Identification (+0.3)**
+    * **Logic:** `invoice.vendor.lower() in transaction.description.lower()`
+    * **Reasoning:** Bank statements often contain the merchant or vendor name in the description text.
+
+3.  **Date Proximity (+0.1)**
+    * **Logic:** `abs(invoice.date - transaction.date).days <= 3`
+    * **Reasoning:** Transactions usually post within a few days of the invoice date. This serves as a tie-breaker for identical amounts.
+
+### Final Score
+The scores are summed and capped at **1.0**.
+
+* **1.0 (Perfect Match):** Amount matches + Vendor matches + Dates close.
+* **0.7 - 0.9 (High Confidence):** Amount matches but maybe vendor name is missing or dates are far apart.
+* **< 0.6 (Ignored):** No meaningful correlation found; these candidates are filtered out to reduce noise.

@@ -4,7 +4,7 @@
 
 A production-ready demo application implementing a polyglot architecture (NestJS + Python) for reconciling bank transactions with invoices. Key features include **Row Level Security (RLS)** for strict multi-tenancy and **Idempotency** for safe bulk operations.
 
-## 🏗 Architecture
+## Architecture
 
 * **Backend API:** NestJS (TypeScript)
 * **Reconciliation Engine:** Python 3.13 + Strawberry GraphQL (Deterministic Heuristics)
@@ -13,7 +13,7 @@ A production-ready demo application implementing a polyglot architecture (NestJS
 
 ---
 
-## 🚀 Local Setup
+## Local Setup
 
 ### 1. Start Infrastructure
 Run the database using Docker:
@@ -21,7 +21,7 @@ Run the database using Docker:
 docker-compose up -d
 ```
 
-## 🏗 Setup NestJs (server)
+## Setup NestJs (server)
 ```bash
 cd server
 npm install
@@ -33,7 +33,7 @@ npx drizzle-kit push
 npm run start:dev
 ```
 
-## 🏗 Setup Python (engine)
+## Setup Python (engine)
 ```bash
 cd engine
 # Create virtual environment
@@ -46,7 +46,7 @@ pip install -r requirements.txt
 python main.py
 ```
 
-## 🧪 API Endpoints & Testing
+## API Endpoints
 
 ### 1. Create a Tenant (Organization)
 **POST** `/v1/tenants`
@@ -92,8 +92,60 @@ python main.py
 
 - Returns matched candidates with confidence scores.
 
+### 5. AI Explanation
+**GET** `/v1/tenants/{TENANT_ID}/reconcile/explain?invoice_id=.&transaction_id=...`
+Returns a detailed explanation of why two items were matched (or not matched), including a confidence score and human-readable reasoning (e.g., "Exact amount match", "Description similarity detected").
+```json
+{
+  "invoice_id": "...",
+  "transaction_id": "...",
+  "ai_confidence": "High",
+  "explanation_text": "AI Analysis: Strong signal detected due to exact amount match ($150).",
+  "model_used": "mock-gpt-4o-mini"
+}
+```
+
+## Tests
+The project includes a comprehensive End-to-End (E2E) test suite using supertest. These tests verify the entire flow, including RLS security enforcement and Idempotency logic.
+```bash
+cd server
+npm run test:e2e
+```
+
+### What is tested?
+- Tenant & Invoice creation.
+
+- Security: Verifies Tenant B cannot access Tenant A's invoices (RLS).
+
+- Idempotency: Verifies re-sending the same batch with the same key returns the cached response.
+
+- AI Logic: Verifies the explanation endpoint returns structured analysis.
 
 
+## Design Descisions
+
+### Multi-Tenancy via Row Level Security (RLS)
+Instead of relying on manual .where(tenant_id) clauses in the application layer (which are prone to developer error), I implemented Defense in Depth using PostgreSQL RLS.
+
+- Privilege De-escalation: The application connects as a superuser but creates a restricted role app_user for business logic.
+
+- Transaction Context: Every request is wrapped in a transaction that:
+  - Switches to app_user (downgrading privileges).
+  - Sets app.current_tenant_id session variable.
+
+- Enforcement: A Policy on invoices and bank_transactions tables strictly enforces tenant_id = current_setting(...).
+
+- Result: It is physically impossible for Tenant A to query Tenant B's data, even if the developer forgets the WHERE clause.
 
 
-I used FORCE ROW LEVEL SECURITY on the tables to ensure that even the application user (who owns the tables) is subject to the RLS policies. This prevents accidental data leaks even if the application has high privileges.
+### Idempotency
+To ensure safe bulk imports (e.g., retrying a failed network request doesn't duplicate data), I implemented an IdempotencyInterceptor.
+
+- It checks the Idempotency-Key header.
+- If the key exists, it returns the cached response immediately without processing.
+- If the key exists but the payload has changed, it throws a 409 Conflict.
+
+
+### Polyglot Architecture
+- NestJS: Handles I/O, Auth, DB management, and orchestrates the flow.
+- Python: Acts as a pure, stateless computation engine. It receives data, computes scores (using heuristics like exact match, date proximity, and text similarity), and returns results. It does not touch the database directly, preserving a clean separation of concerns.

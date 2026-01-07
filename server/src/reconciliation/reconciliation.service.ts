@@ -1,4 +1,4 @@
-import { Injectable, InternalServerErrorException } from '@nestjs/common';
+import { Injectable, InternalServerErrorException, NotFoundException } from '@nestjs/common';
 import { DrizzleService } from '../drizzle/drizzle.service';
 import { invoices, bankTransactions } from '../db/schema';
 import { eq, and } from 'drizzle-orm';
@@ -66,6 +66,58 @@ export class ReconciliationService {
         console.error("Failed to connect to Python Engine:", error.message);
         throw new InternalServerErrorException('Reconciliation Service Unavailable');
       }
+    });
+  }
+
+  async explainMatch(tenantId: string, invoiceId: string, transactionId: string) {
+    return this.drizzleService.runWithTenant(tenantId, async (tx) => {
+      // 1. Fetch the specific pair
+      // RLS ensures we can't fetch data from another tenant
+      const [invoice] = await tx.select().from(invoices).where(eq(invoices.id, invoiceId));
+      const [transaction] = await tx.select().from(bankTransactions).where(eq(bankTransactions.id, transactionId));
+
+      if (!invoice || !transaction) {
+        throw new NotFoundException('Invoice or Transaction not found');
+      }
+
+      // 2. "AI" Explanation Logic (Mocked)
+      // In production, this would call OpenAI. Here, we build a smart string.
+      const invAmount = parseFloat(invoice.amount);
+      const txAmount = parseFloat(transaction.amount);
+      const diff = Math.abs(invAmount - txAmount);
+      
+      let explanation = "AI Analysis: ";
+      let confidence = "Low";
+
+      // Heuristic 1: Amount
+      if (diff < 0.01) {
+        explanation += `Strong signal detected due to exact amount match ($${invAmount}). `;
+        confidence = "High";
+      } else if (diff < 5.0) {
+        explanation += `Potential match. Amounts are similar (diff: $${diff.toFixed(2)}), possibly due to fees. `;
+        confidence = "Medium";
+      } else {
+        explanation += `Amounts differ significantly ($${invAmount} vs $${txAmount}). `;
+      }
+
+      // Heuristic 2: Text
+      // Safe check for descriptions
+      const invDesc = (invoice.description || "").toLowerCase();
+      const txDesc = (transaction.description || "").toLowerCase();
+
+      if (invDesc && txDesc.includes(invDesc)) {
+        explanation += `Vendor identification confirmed: '${invoice.description}' found in bank memo.`;
+        confidence = "Very High";
+      }
+
+      // 3. Return structured response
+      return {
+        invoice_id: invoiceId,
+        transaction_id: transactionId,
+        ai_confidence: confidence,
+        explanation_text: explanation,
+        model_used: "mock-gpt-4o-mini" 
+      };
     });
   }
 }

@@ -28,7 +28,7 @@ cp .env.example .env
 # Run Database Migrations (setup schema)
 npx drizzle-kit push
 # Start Server
-npm run start:dev
+npm run start
 ```
 
 ## Setup Python (engine)
@@ -75,8 +75,7 @@ python main.py
     {
       "amount": 150.00,
       "date": "2023-10-25T10:00:00Z",
-      "description": "Payment for Consulting",
-      "currency": "USD"
+      "description": "Payment for Consulting"
     }
   ]
 }
